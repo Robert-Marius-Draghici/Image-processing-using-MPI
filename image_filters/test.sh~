@@ -1,6 +1,0 @@
-#!/bin/bash
-
-for i in `seq 1 21`; do
-	diff -s ../big_tests_apd/big_test/$i-m.pgm $i-m.pgm
-	diff -s ../pgm/$i-s.pgm $i-s.pgm
-done
