@@ -1,0 +1,134 @@
+Tema 3 - Algoritmi Paraleli si Distribuiti,Draghici Marius-Robert,336CA
+================================================================================
+	Structuri definite
+	
+	Structura Image contine datele relevante ale imaginii, precum antetul,
+latimea, lungimea, valoarea maxima a intensitatii pixelilor, matricea de pixeli.
+Pe langa acestea, structura mai contine un vector de caractere whitespace, 
+pentru a separa pixelii din poza prelucrata cu aceleasi caractere ca in poza
+initiala, precum si un vector de pixeli, deoarece pe parcursul prelucrarii, 
+matricea de pixeli este transformata intr-un vector de linii pentru a facilita 
+transmiterea de blocuri intregi de pixeli dintr-odata.
+================================================================================
+	Tag-uri utilizate
+	
+	In cadrul implementarii, am utilizat o serie de tag-uri ce indicau canale 
+de comunicatie. 
+	TAG_HELPER este canalul de comunicatie folosit pentru a trimite date auxiliare
+la copii, astfel incat acestia sa stie exact cata memorie sa aloce pentru 
+blocurile de pixeli ce vor fi primite.
+	TAG_SOBEL si TAG_MEAN_REMOVAL sunt canale de comunicatie ce indica nodurilor
+frunza ce fel de filtru sa aplice asupra pozelor.
+	TAG_ACTIVE indica nodurilor din arbore faptul ca inca mai sunt poze de 
+prelucrat.
+	TAG_TERMINATE indica nodurilor din arbore faptul ca toate pozele au fost
+prelucrate si este timpul sa trimita la parinte statistica legata de liniile
+procesate.
+	TAG_NUMBER si TAG_VECTOR sunt folosite de nodurile intermediare pentru a 
+face distinctie intre mesajele trimise de noduri frunza sau alte noduri
+intermediare, deoarece continutul lui difera in functie de tipul de nod. Nodurile
+frunza trimit doar numarul de linii procesate, in timp ce nodurile intermediare
+trimit 2 vectori, unul continand rankurile proceselor de la care au fost
+colectate statisticile pana la acel moment si unul continand statisticile 
+efective.
+================================================================================
+	Implementare
+	
+	La pornire, fiecare proces citeste si ignora liniile din fisier pana ajunge
+la linia ce contine ID-ul nodului egal cu rankul sau. Astfel, fiecare nod stie
+care sunt vecinii sai si poate comunica doar cu acestia.
+
+	Radacina:
+	Nodul radacina este liderul topologiei. Radacina citeste pozele, determina
+ce filtru trebuie aplicat asupra pozelor, extrage matricea de pixeli si alte
+date relevante pentru prelucrare. Dupa citirea unei poze, radacina imparte 
+matricea de pixeli in nrLinii/nrCopii blocuri, ultimul nod primind restul.
+Trebuie mentionat faptul ca blocurile de pixeli trimise contin si marginea de sus 
+si de jos a blocului ce trebuie prelucrat. 
+	Initial, radacina trimite un mesaj pe canalul de comunicatie TAG_ACTIVE 
+pentru a indica copiilor ca urmeaza un bloc de prelucrat, apoi trimite informatiile 
+auxiliare(lungimea, latimea, valoarea maxima) si apoi trimite blocul de pixeli. 
+Apoi, radacina asteapta sa primeasca lungimea si latimea blocului prelucrat(aceasta 
+va fi diferita de lungimea si latimea trimise, deoarece nu am mai trimis marginile 
+si bordurile de zerouri) si vectorul de pixeli pe care il concateneaza la vectorul 
+de pixeli din cadrul structurii Image.
+	Dupa ce a primit toate blocurile prelucrate de la copii, radacina scrie
+poza intr-un nou fisier si trece la prelucrarea urmatoarei poze.
+	Dupa prelucrarea tuturor pozelor, radacina trimite un mesaj pe canalul de
+comunicatie TAG_TERMINATE pentru a le indica celorlalte noduri ca procesarea s-a
+incheiat. Apoi, asteapta sa primeasca statisticile de la copii si le scrie intr-un
+fisier.
+
+	Nod intermediar:
+	Parintele unui nod diferit de radacina este considerat nodul de la care a fost
+primit primul mesaj.
+	Cat timp nodul primeste mesaje pe canalul TAG_ACTIVE:
+	1.Asteapta sa primeasca de la parinte informatiile auxiliare si blocul de
+pixeli.
+	2.Imparte blocul primit asemeni radacinii si trimite blocurile rezultate la 
+copii. Blocul este reprezentat de un vector de linii.
+	3.Asteapta sa primeasca de la copii blocurile prelucrate, impreuna cu 
+informatiile auxiliare.
+	4.Concateneaza blocurile primite de la copii intr-un vector nou.
+	5.Trimite blocurile concatenate impreuna cu informatiile auxiliare la 
+nodul parinte.
+	Daca a primit mesaj pe canalul TAG_TERMINATE, nodul trimite la toti copiii
+acest mesaj, apoi asteapta sa primeasca statisticile de la toti si le trimite
+la parinte, dupa care isi incheie executia.
+
+	Nod frunza:
+	Nodul frunza este cel care aplica filtrele asupra blocurilor primite.
+	Cat timp nodul primeste mesaje pe canalul TAG_ACTIVE:
+	1.Asteapta sa primeasca de la parinte informatiile auxiliare si blocul de
+pixeli.
+	2.Reconstruieste matricea de pixeli din vectorul primit de la parinte.
+	3.Initializeaza datele relevante pentru filtre: matricea de convolutie,
+factorul si deplasamentul.
+	4.Aloca spatiu pentru noua matrice de pixeli, ignorand marginea superioara si
+inferioara, precum si bordurile de zerouri din stanga si dreapta.
+	5.Pentru fiecare pixel din blocul ce trebuie prelucrat:
+	5.1.Se inmultesc element cu element matricea de convolutie si matricea 3x3
+centrata in pixelul ce este prelucrat. 
+	5.2.Se aduna rezultatele acestor inmultiri, se imparte la factor si se aduna 
+deplasamentul. 
+	5.3.Daca valoarea nu se incadreaza in intervalul [0,maxVal], atunci este 
+adusa in acest interval.
+	6.Creeaza vectorul de linii din matricea de pixeli prelucrata.
+	7.Trimite la parinte lungimea, latimea si blocul prelucrat.
+	La primirea mesajului pe canalul TAG_TERMINATE, trimite numarul de linii
+procesate si isi incheie executia.
+================================================================================
+	Statistici
+	
+	Nodurile frunza trebuie doar sa trimita la parinte numarul de linii procesate.
+	Nodurile intermediare trebuie sa faca distinctia intre nodurile frunza si
+alte noduri intermediare, deoarece ele trimit mesaje diferite. Distinctia se 
+face prin intermediul tagurilor TAG_NUMBER si TAG_VECTOR. Nodurile intermediare
+creeaza 2 vectori locali de rankuri si de statistici, unde mai intai introduc
+informatiile legate de procesul curent, apoi adauga informatiile primite de la
+copii si trimit vectorii rezultati la parinte.
+	Am utilizat 2 vectori, deoarece un nod intermediar, desi isi parcurge copii
+in ordine crescatoare, daca primeste de la acestia alti vectori, atunci cand
+concatenam informatiile, nu putem garanta ca s-a pastrat ordinea crescatoare a
+rankurilor. Astfel, avem un vector separat de rankuri, care ne indica ca statistica
+de pe pozitia i a fost trimisa de procesul cu rankul de pe pozitia i.
+	Deoarece radacina trebuie sa scrie statisticile in ordinea crescatoare a 
+nodurilor, odata ce am primit cei doi vectori, creez un map, cu cheia rankul
+si valoarea statistica procesului, care va realiza sortarea dupa cheie. Apoi,
+scriem informatiile din map in fisier. 
+================================================================================
+	Mediul de testare
+	
+	Tema a fost testata atat local, cat si pe coada campus-haswell.q din clusterul 
+facultatii, folosind comanda qsub -q campus-haswell.q -cwd script.sh nrproc 
+fisier_topologie fisier_imagini fisier_statistica. Apelez scriptul cu parametrii
+pentru a rula executabilul cu valori date din linia de comanda. Pentru rulare 
+am folosit scriptul script.sh inclus in arhiva. Pentru testare, am folosit atat 
+fisierul imagini.in cu cele 42 de poze si ambele topologii, cat si fisierele 
+din smoke_test.
+================================================================================
+	Makefile
+	
+	Pentru a rula programul din cadrul makefile-ului, se folosesc variabile care
+sunt initializate in linia de comanda. Exemplu de rulare:
+make run NPROC=12 T=topologie.in I=imagini.in S=statistica.out

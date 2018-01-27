@@ -1,0 +1,15 @@
+#!/bin/bash
+
+for i in `seq 1 10`; do
+	time mpirun -n 29 filtru pgm/topologie2.in pgm/imagini.in pgm/statistica2
+	for j in `seq 1 21`; do
+		diff -s verificare/$j-m.pgm $j-m.pgm >> out1.txt
+		diff -s verificare/$j-s.pgm $j-s.pgm >> out1.txt
+	done
+	diff -s pgm/statistica2 statistica2.em >> out1.txt
+	echo "" >> out1.txt
+	
+	rm -rf *-m*
+	rm -rf *-s*
+	rm -rf pgm/statistica2
+done
